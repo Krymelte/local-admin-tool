@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Admin Panel</title>
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            background: #0a0a0a;
+        }
+
+        .card {
+            border: 1px solid #1f2937;
+            background: #0f0f10;
+            border-radius: 16px;
+        }
+
+        .input {
+            background: #0b0b0c;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 10px 12px;
+            width: 100%;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
+            outline: none;
+        }
+
+        .input.invalid {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.35);
+        }
+
+        .btn {
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 10px 14px;
+            transition: background 0.2s ease, border 0.2s ease, transform 0.15s ease;
+        }
+
+        .btn:hover:not(:disabled) {
+            border-color: #374151;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #1d4ed8;
+        }
+
+        .btn:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sub {
+            color: #9ca3af;
+            font-size: 12px;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+        }
+
+        .navbtn.active {
+            background: #2563eb;
+            color: white;
+        }
+
+        .table-head {
+            background: #0a0a0a;
+        }
+
+        .row {
+            border-top: 1px solid #1f2937;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 900px) {
+            .grid2 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="text-neutral-100">
+    <div class="min-h-screen flex">
+        <!-- Sidebar -->
+        <aside class="w-72 p-4 border-r border-neutral-800">
+            <h1 class="font-bold text-lg mb-1">Local Admin Panel</h1>
+            <div class="sub mb-4">Base URL<br><span class="mono text-[11px]" id="baseUrlLabel">http://127.0.0.1:5501</span></div>
+            <nav id="nav" class="space-y-2"></nav>
+        </aside>
+
+        <!-- Main -->
+        <main class="flex-1 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 id="panelTitle" class="text-xl font-bold">Rewards</h2>
+                    <p class="sub">Dates use your local timezone → epoch seconds</p>
+                </div>
+            </div>
+
+            <!-- Rewards -->
+            <section id="panel-rewards" class="card p-4 space-y-3">
+                <div class="grid2">
+                    <div>
+                        <label class="sub block mb-1" for="rw-nick">Player nickname</label>
+                        <input id="rw-nick" class="input" placeholder="e.g. Microvolts" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="rw-defmsg">Default message</label>
+                        <input id="rw-defmsg" class="input" value="Admin reward" autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold">Items</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="rw-paste-toggle" class="btn" data-rw-lock>Paste list</button>
+                        <button id="rw-add" class="btn" data-rw-lock>+ Add row</button>
+                        <button id="rw-reset" class="btn" data-rw-lock>Reset rows</button>
+                    </div>
+                </div>
+
+                <div id="rw-paste" class="hidden">
+                    <div class="card p-3">
+                        <p class="sub mb-2">
+                            New format (preferred): one <span class="mono">7-digit</span> item ID per line, optional trailing comma:<br>
+                            <span class="mono">8200004,</span><br><span class="mono">8001108,</span>
+                        </p>
+                        <p class="sub mb-2">Legacy also works: <span class="mono">1234567x3</span> or <span class="mono">1234567,3</span></p>
+                        <textarea id="rw-paste-area" rows="6" class="input" placeholder="8200004,&#10;8001108,&#10;8000000,"></textarea>
+                        <div class="mt-2 flex gap-2">
+                            <button id="rw-parse" class="btn" data-rw-lock>Parse</button>
+                            <button id="rw-paste-clear" class="btn" data-rw-lock>Clear</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">Item ID</th>
+                                <th class="text-left px-3 py-2">Qty</th>
+                                <th class="text-left px-3 py-2">Message (optional)</th>
+                                <th class="text-left px-3 py-2">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rw-rows"></tbody>
+                    </table>
+                </div>
+
+                <div class="sub" id="rw-stats">Valid rows: 0 • Total API requests: 0</div>
+
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="rw-send" class="btn btn-primary" data-rw-lock>Send rewards</button>
+                    <button id="rw-cancel" class="btn hidden">Cancel sending</button>
+                    <div class="sub" id="rw-progress" role="status" aria-live="polite"></div>
+                </div>
+
+                <div class="overflow-auto mt-2">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">#</th>
+                                <th class="text-left px-3 py-2">ItemID</th>
+                                <th class="text-left px-3 py-2">Message</th>
+                                <th class="text-left px-3 py-2">Status</th>
+                                <th class="text-left px-3 py-2">Response</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rw-log"><tr><td colspan="5" class="text-center py-6 sub">(empty)</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Announce / Tip -->
+            <section id="panel-announce" class="card p-4 space-y-3 hidden">
+                <div class="grid2">
+                    <div>
+                        <label class="sub block mb-1" for="an-endpoint">Endpoint</label>
+                        <select id="an-endpoint" class="input">
+                            <option value="/announce">/announce</option>
+                            <option value="/tip">/tip</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="an-text">Text (max 512 chars)</label>
+                        <textarea id="an-text" class="input" rows="3" maxlength="512" placeholder="Your message..."></textarea>
+                        <div class="sub"><span id="an-count">0</span> / 512</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="an-send" class="btn btn-primary">Send</button>
+                    <div id="an-result" class="sub" role="status" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <!-- Process Manager -->
+            <section id="panel-proc" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="pm-base">Launcher Base URL</label>
+                        <input id="pm-base" class="input" value="http://127.0.0.1:5599">
+                        <div class="sub">Run: <span class="mono">python proc_launcher.py --port 5599</span></div>
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="pm-name">Allowed programs</label>
+                        <div class="flex gap-2">
+                            <select id="pm-name" class="input"></select>
+                            <button id="pm-refresh-allow" class="btn">Refresh</button>
+                        </div>
+                        <div class="sub mt-1">Optional args (JSON array):</div>
+                        <input id="pm-args" class="input mono" placeholder='["--example","arg"]'>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button id="pm-start" class="btn btn-primary w-full">Start</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold">Running Processes</h3>
+                    <div class="flex gap-2">
+                        <button id="pm-refresh" class="btn">Refresh</button>
+                    </div>
+                </div>
+
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">ID</th>
+                                <th class="text-left px-3 py-2">Name</th>
+                                <th class="text-left px-3 py-2">PID</th>
+                                <th class="text-left px-3 py-2">Status</th>
+                                <th class="text-left px-3 py-2">Cmd</th>
+                                <th class="text-left px-3 py-2">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pm-body"><tr><td colspan="6" class="text-center py-6 sub">(empty)</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3">
+                    <label class="sub block mb-1" for="pm-tail-id">Selected process log (tail)</label>
+                    <div class="flex gap-2 mb-2 flex-wrap">
+                        <input id="pm-tail-id" class="input mono" placeholder="process id to tail">
+                        <input id="pm-tail-lines" class="input" style="width:110px" value="200">
+                        <button id="pm-tail-btn" class="btn">Tail</button>
+                    </div>
+                    <pre id="pm-log" class="text-xs whitespace-pre-wrap">(no output)</pre>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="mt-8 pt-4 border-t border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div class="sub">Made by <span class="font-semibold">CriseStudios</span></div>
+                <div>
+                    <button id="jwt-toggle" class="btn">Show JWT</button>
+                    <div id="jwt-box" class="hidden mt-2 card p-3">
+                        <div class="sub mb-1">Use hardcoded JWT (toggle off to paste your own)</div>
+                        <label class="sub flex items-center gap-2 mb-2"><input id="jwt-hardcoded" type="checkbox" checked> hardcoded</label>
+                        <input id="jwt-input" class="input" value="">
+                        <div class="sub mt-2">Header sent: <span class="mono">Authorization: Bearer &lt;JWT&gt;</span></div>
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        /* ====== CONFIG ====== */
+        const BASE_URL = "http://127.0.0.1:5501";
+        const HARDCODED_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMjMsInVzZXJuYW1lIjoibWF4Lm11c3Rlcm1hbm4iLCJyb2xlIjo3fQ.BaPE3_nu41D_Sk5pK2FckGY222BmnWbVsPxBm5wkH8k";
+        const STORAGE_KEYS = Object.freeze({
+            rewardsRows: "lat:rewardsRows",
+            rewardsDefaults: "lat:rewardsDefaults",
+            lastPanel: "lat:lastPanel",
+            jwt: "lat:jwt",
+            jwtMode: "lat:jwtMode"
+        });
+
+        const storage = (() => {
+            let enabled = false;
+            try {
+                const testKey = "lat:test";
+                window.localStorage.setItem(testKey, "1");
+                window.localStorage.removeItem(testKey);
+                enabled = true;
+            } catch (err) {
+                console.warn("localStorage disabled:", err);
+            }
+            return {
+                enabled,
+                get(key, fallback) {
+                    if (!enabled) return fallback;
+                    try {
+                        const raw = window.localStorage.getItem(key);
+                        return raw === null ? fallback : JSON.parse(raw);
+                    } catch (err) {
+                        console.warn("Failed to read storage", key, err);
+                        return fallback;
+                    }
+                },
+                set(key, value) {
+                    if (!enabled) return;
+                    try {
+                        window.localStorage.setItem(key, JSON.stringify(value));
+                    } catch (err) {
+                        console.warn("Failed to persist storage", key, err);
+                    }
+                }
+            };
+        })();
+
+        /* ====== JWT FOOTER ====== */
+        const jwtToggle = document.getElementById('jwt-toggle');
+        const jwtBox = document.getElementById('jwt-box');
+        const jwtHard = document.getElementById('jwt-hardcoded');
+        const jwtInput = document.getElementById('jwt-input');
+        jwtInput.value = HARDCODED_JWT;
+        jwtToggle.onclick = () => jwtBox.classList.toggle('hidden');
+        function getJWT() { return jwtHard.checked ? HARDCODED_JWT : (jwtInput.value || "").trim(); }
+
+        (function initJwtPersistence() {
+            const savedMode = storage.get(STORAGE_KEYS.jwtMode, "hardcoded");
+            const savedJwt = storage.get(STORAGE_KEYS.jwt, HARDCODED_JWT);
+            if (savedMode === "custom") {
+                jwtHard.checked = false;
+                jwtInput.value = typeof savedJwt === "string" ? savedJwt : "";
+            }
+            jwtInput.disabled = jwtHard.checked;
+
+            jwtHard.addEventListener('change', () => {
+                jwtInput.disabled = jwtHard.checked;
+                storage.set(STORAGE_KEYS.jwtMode, jwtHard.checked ? "hardcoded" : "custom");
+            });
+            jwtInput.addEventListener('input', () => {
+                if (!jwtHard.checked) {
+                    storage.set(STORAGE_KEYS.jwt, jwtInput.value || "");
+                }
+            });
+        })();
+
+        /* ====== NAV ====== */
+        const baseLabel = document.getElementById('baseUrlLabel');
+        if (baseLabel) baseLabel.textContent = BASE_URL;
+
+        function addSectionHeader(text) {
+            const h = document.createElement('div');
+            h.className = "sub uppercase tracking-wide text-[11px] mt-4 mb-1";
+            h.textContent = text;
+            document.getElementById('nav').appendChild(h);
+        }
+        function addNavBtn(label, panelId) {
+            const b = document.createElement('button');
+            b.className = "btn navbtn w-full text-left";
+            b.textContent = label;
+            b.dataset.target = panelId;
+            b.onclick = () => show(panelId, label);
+            document.getElementById('nav').appendChild(b);
+        }
+        const NAV_GROUPS = [
+            { title: "Players", items: [
+                ["Rewards", "panel-rewards"],
+                ["User Info", "panel-user"],
+                ["Ban / CheatBan / Mute", "panel-ban"],
+                ["Disconnect", "panel-disconnect"],
+                ["Kick (Room)", "panel-kick"],
+            ] },
+            { title: "Broadcast", items: [
+                ["Announce / Tip", "panel-announce"],
+            ] },
+            { title: "Events", items: [
+                ["Capsule Event", "panel-capsule"],
+                ["EXP / MP Event", "panel-expmp"],
+                ["Event Mission", "panel-eventmission"],
+                ["Trade System", "panel-trade"],
+            ] },
+            { title: "Rooms", items: [
+                ["Rooms (All)", "panel-rooms"],
+                ["Room Info", "panel-roominfo"],
+                ["Change Host", "panel-changehost"],
+                ["Change Room Title", "panel-changeroomtitle"],
+                ["Break Room", "panel-breakroom"],
+            ] },
+            { title: "Monitoring", items: [
+                ["Online Players", "panel-online"],
+                ["Chat Logs", "panel-chatlogs"],
+            ] },
+            { title: "Tournaments", items: [
+                ["Map Roulette", "panel-maproulette"],
+            ] },
+            { title: "Utilities", items: [
+                ["Process Manager", "panel-proc"],
+            ] },
+        ];
+        NAV_GROUPS.forEach(g => { addSectionHeader(g.title); g.items.forEach(([l, i]) => addNavBtn(l, i)); });
+
+        function show(panelId, title) {
+            document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+            const target = document.getElementById(panelId);
+            if (target) target.classList.remove('hidden');
+            document.getElementById('panelTitle').textContent = title;
+            document.querySelectorAll('#nav .navbtn').forEach(b => b.classList.remove('active'));
+            const act = document.querySelector(`#nav .navbtn[data-target="${panelId}"]`);
+            if (act) act.classList.add('active');
+            storage.set(STORAGE_KEYS.lastPanel, { panelId, title });
+        }
+
+        const savedPanel = storage.get(STORAGE_KEYS.lastPanel, null);
+        if (savedPanel && document.getElementById(savedPanel.panelId)) {
+            show(savedPanel.panelId, savedPanel.title);
+        } else {
+            show("panel-rewards", "Rewards");
+        }
+
+        /* ====== Helpers shared ====== */
+        function toEpoch(dtLocalStr) {
+            if (!dtLocalStr) return NaN;
+            const d = new Date(dtLocalStr.replace(' ', 'T'));
+            const t = d.getTime();
+            if (isNaN(t)) return NaN;
+            return Math.floor(t / 1000);
+        }
+        async function postJson(path, body) {
+            const url = BASE_URL + path;
+            const resp = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json, text/plain, */*",
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + getJWT()
+                },
+                body: JSON.stringify(body || {})
+            });
+            const text = await resp.text();
+            let data = null; try { data = JSON.parse(text); } catch { }
+            return { ok: resp.ok, status: resp.status, data, text };
+        }
+        async function getJson(path) {
+            const url = BASE_URL + path;
+            const resp = await fetch(url, { headers: { "Authorization": "Bearer " + getJWT() } });
+            const text = await resp.text();
+            let data = null; try { data = JSON.parse(text); } catch { }
+            return { ok: resp.ok, status: resp.status, data, text };
+        }
+
+        /* ====== Rewards ====== */
+        const defaultRow = () => ({ itemId: "", qty: 1, msg: "" });
+        const rwNick = document.getElementById('rw-nick');
+        const rwDefMsg = document.getElementById('rw-defmsg');
+        const rwRows = document.getElementById('rw-rows');
+        const rwStats = document.getElementById('rw-stats');
+        const rwProgress = document.getElementById('rw-progress');
+        const rwLog = document.getElementById('rw-log');
+        const rwAdd = document.getElementById('rw-add');
+        const rwReset = document.getElementById('rw-reset');
+        const rwSend = document.getElementById('rw-send');
+        const rwCancel = document.getElementById('rw-cancel');
+        const rwPasteToggle = document.getElementById('rw-paste-toggle');
+        const rwPasteBox = document.getElementById('rw-paste');
+        const rwPasteArea = document.getElementById('rw-paste-area');
+        const rwParse = document.getElementById('rw-parse');
+        const rwPasteClear = document.getElementById('rw-paste-clear');
+
+        const savedDefaults = storage.get(STORAGE_KEYS.rewardsDefaults, {});
+        if (savedDefaults.nick) rwNick.value = savedDefaults.nick;
+        if (savedDefaults.defmsg) rwDefMsg.value = savedDefaults.defmsg;
+
+        let rows = storage.get(STORAGE_KEYS.rewardsRows, null);
+        if (!Array.isArray(rows) || rows.length === 0) {
+            rows = [defaultRow()];
+        } else {
+            rows = rows.map(r => ({
+                itemId: typeof r.itemId === 'string' ? r.itemId : "",
+                qty: Number.isInteger(r.qty) && r.qty > 0 ? r.qty : 1,
+                msg: typeof r.msg === 'string' ? r.msg : ""
+            }));
+        }
+
+        function persistRewardsState() {
+            storage.set(STORAGE_KEYS.rewardsRows, rows);
+            storage.set(STORAGE_KEYS.rewardsDefaults, {
+                nick: rwNick.value || "",
+                defmsg: rwDefMsg.value || ""
+            });
+        }
+
+        function ensurePlaceholderRow() {
+            if (rows.length === 0) {
+                rows.push(defaultRow());
+            }
+        }
+
+        function applyRowValidity() {
+            const trList = Array.from(rwRows.querySelectorAll('tr'));
+            trList.forEach((tr, idx) => {
+                const row = rows[idx];
+                if (!row) return;
+                const itemInput = tr.querySelector('input[data-k="itemId"]');
+                const qtyInput = tr.querySelector('input[data-k="qty"]');
+                const isItemValid = String(row.itemId).trim().length > 0;
+                const isQtyValid = Number.isInteger(row.qty) && row.qty > 0;
+                if (itemInput) itemInput.classList.toggle('invalid', !isItemValid);
+                if (qtyInput) qtyInput.classList.toggle('invalid', !isQtyValid);
+            });
+        }
+
+        function refreshStats() {
+            const valid = rows.filter(r => String(r.itemId).trim() !== "" && (parseInt(r.qty, 10) || 0) > 0);
+            const totalReq = valid.reduce((s, r) => s + Math.max(1, parseInt(r.qty, 10) || 1), 0);
+            const invalidCount = rows.length - valid.length;
+            let text = `Valid rows: ${valid.length} • Total API requests: ${totalReq}`;
+            if (invalidCount > 0) {
+                text += ` • Invalid rows: ${invalidCount}`;
+            }
+            rwStats.textContent = text;
+            applyRowValidity();
+        }
+
+        function renderRows() {
+            rwRows.innerHTML = "";
+            rows.forEach((r, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "row";
+                tr.innerHTML = `
+                    <td class="px-3 py-2"><input data-k="itemId" data-i="${idx}" class="input" value="${r.itemId}" placeholder="1000000" autocomplete="off"></td>
+                    <td class="px-3 py-2"><input data-k="qty" data-i="${idx}" class="input" type="number" min="1" value="${r.qty}"></td>
+                    <td class="px-3 py-2"><input data-k="msg" data-i="${idx}" class="input" value="${r.msg || ""}" placeholder="optional override" autocomplete="off"></td>
+                    <td class="px-3 py-2"><button data-del="${idx}" class="btn" data-rw-lock>Remove</button></td>
+                `;
+                rwRows.appendChild(tr);
+            });
+            ensurePlaceholderRow();
+            refreshStats();
+            persistRewardsState();
+        }
+
+        rwRows.addEventListener('input', (e) => {
+            const k = e.target.getAttribute('data-k');
+            if (!k) return;
+            const i = parseInt(e.target.getAttribute('data-i'), 10);
+            if (Number.isNaN(i) || !rows[i]) return;
+            if (k === "itemId") {
+                rows[i].itemId = (e.target.value || "").replace(/[^0-9]/g, "");
+                e.target.value = rows[i].itemId;
+            } else if (k === "qty") {
+                const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+                rows[i].qty = v; e.target.value = v;
+            } else if (k === "msg") {
+                rows[i].msg = e.target.value;
+            }
+            refreshStats();
+            persistRewardsState();
+        });
+        rwRows.addEventListener('click', (e) => {
+            const del = e.target.getAttribute('data-del');
+            if (del !== null) {
+                rows.splice(parseInt(del, 10), 1);
+                ensurePlaceholderRow();
+                renderRows();
+            }
+        });
+        rwAdd.onclick = () => { rows.push(defaultRow()); renderRows(); };
+        rwReset.onclick = () => {
+            if (!confirm('Reset all reward rows?')) return;
+            rows = [defaultRow()];
+            renderRows();
+            rwLog.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">(empty)</td></tr>`;
+            rwProgress.textContent = "";
+        };
+        rwPasteToggle.onclick = () => rwPasteBox.classList.toggle('hidden');
+        rwPasteClear.onclick = () => rwPasteArea.value = "";
+
+        rwParse.onclick = () => {
+            const text = rwPasteArea.value || "";
+            const out = [];
+            const lines = text.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+            for (const line of lines) {
+                const tokens = line.split(/[\s]+/).map(t => t.trim()).filter(Boolean);
+                for (let tok of tokens) {
+                    tok = tok.replace(/,+$/, "");
+                    let m = tok.match(/^(\d{1,9})\s*[xX,]\s*(\d{1,4})$/);
+                    if (m) { out.push({ itemId: m[1], qty: Math.max(1, parseInt(m[2], 10)), msg: "" }); continue; }
+                    m = tok.match(/^(\d{7})$/);
+                    if (m) { out.push({ itemId: m[1], qty: 1, msg: "" }); continue; }
+                }
+            }
+            if (out.length) {
+                rows = out;
+                renderRows();
+                rwPasteBox.classList.add('hidden');
+            } else {
+                alert("No valid item IDs found.");
+            }
+        };
+
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        let sendAbort = false;
+        let sending = false;
+
+        function setSendingState(active) {
+            sending = active;
+            const lockable = document.querySelectorAll('[data-rw-lock]');
+            lockable.forEach(el => { el.disabled = active; });
+            rwCancel.classList.toggle('hidden', !active);
+            if (active) {
+                rwCancel.disabled = false;
+                rwProgress.textContent = '';
+            }
+        }
+
+        rwCancel.onclick = () => {
+            if (!sending) return;
+            sendAbort = true;
+            rwCancel.disabled = true;
+            rwProgress.textContent = 'Canceling after current request...';
+        };
+
+        rwSend.onclick = async () => {
+            const nick = (rwNick.value || "").trim();
+            const defmsg = (rwDefMsg.value || "").trim() || "Admin reward";
+
+            const valid = rows.filter(r => String(r.itemId).trim() !== "" && (parseInt(r.qty, 10) || 0) > 0);
+            const totalReq = valid.reduce((s, r) => s + Math.max(1, parseInt(r.qty, 10) || 1), 0);
+
+            if (!nick) { rwProgress.textContent = "Please enter a nickname."; return; }
+            if (valid.length === 0) { rwProgress.textContent = "Please add at least one valid item row."; return; }
+
+            setSendingState(true);
+            sendAbort = false;
+            rwProgress.textContent = "";
+            rwLog.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">(sending...)</td></tr>`;
+            rwLog.innerHTML = "";
+
+            let idx = 0, failures = 0;
+            let lastSecond = null;
+
+            async function pace() {
+                let nowMs = Date.now();
+                let nowSec = Math.floor(nowMs / 1000);
+                if (lastSecond !== null && nowSec === lastSecond) {
+                    const remainder = 1000 - (nowMs % 1000);
+                    const jitter = 50 + Math.floor(Math.random() * 100);
+                    await sleep(remainder + jitter);
+                    nowMs = Date.now();
+                    nowSec = Math.floor(nowMs / 1000);
+                } else {
+                    const jitter = 50 + Math.floor(Math.random() * 100);
+                    await sleep(jitter);
+                    nowMs = Date.now();
+                    nowSec = Math.floor(nowMs / 1000);
+                }
+                lastSecond = nowSec;
+            }
+
+            function pushLogRow(obj) {
+                if (rwLog.firstElementChild && rwLog.firstElementChild.children && rwLog.firstElementChild.children.length === 1) {
+                    rwLog.innerHTML = "";
+                }
+                const tr = document.createElement('tr');
+                tr.className = "row";
+                tr.innerHTML = `
+                    <td class="px-3 py-2">${obj.idx}</td>
+                    <td class="px-3 py-2">${obj.itemId}</td>
+                    <td class="px-3 py-2 break-words max-w-[320px]">${obj.message}</td>
+                    <td class="px-3 py-2">${obj.status}</td>
+                    <td class="px-3 py-2 break-words max-w-[360px]">${(typeof obj.response === "string") ? obj.response : JSON.stringify(obj.response)}</td>
+                `;
+                rwLog.appendChild(tr);
+            }
+
+            try {
+                for (const r of valid) {
+                    const itemId = parseInt(r.itemId, 10);
+                    const qty = Math.max(1, parseInt(r.qty, 10) || 1);
+                    const msg = (r.msg && r.msg.trim()) ? r.msg : defmsg;
+
+                    for (let c = 0; c < qty; c++) {
+                        if (sendAbort) break;
+                        idx++;
+                        await pace();
+                        try {
+                            const { ok, status, data, text } = await postJson("/sendreward", {
+                                Nickname: nick,
+                                ItemID: String(itemId),
+                                Message: msg
+                            });
+                            pushLogRow({ idx, itemId, message: msg, status: ok ? "ok" : `HTTP ${status}`, response: data || text || "" });
+                            if (!ok) failures++;
+                        } catch (err) {
+                            failures++;
+                            pushLogRow({ idx, itemId, message: msg, status: `HTTP ${err.status || "ERR"}`, response: err.data || err.text || String(err) });
+                        }
+                        rwProgress.textContent = `Sent ${idx}/${totalReq} requests...`;
+                    }
+                    if (sendAbort) break;
+                }
+            } finally {
+                const summary = sendAbort ? `Canceled after ${idx} request${idx === 1 ? "" : "s"}. Failures: ${failures}.` : `Done. Sent ${idx}. ${failures ? failures + " failed." : "All OK."}`;
+                rwProgress.textContent = summary;
+                setSendingState(false);
+                sendAbort = false;
+            }
+        };
+
+        rwNick.addEventListener('input', persistRewardsState);
+        rwDefMsg.addEventListener('input', persistRewardsState);
+
+        renderRows();
+
+        /* ===== Process Manager ===== */
+        (function () {
+            const $ = (id) => document.getElementById(id);
+            const base = $("pm-base");
+            const nameSel = $("pm-name");
+            const argsInp = $("pm-args");
+            const body = $("pm-body");
+            const tailId = $("pm-tail-id");
+            const tailLines = $("pm-tail-lines");
+            const logBox = $("pm-log");
+
+            async function jget(path) {
+                const resp = await fetch((base.value || "").replace(/\/$/, "") + path, { method: "GET" });
+                const text = await resp.text();
+                let data = null; try { data = JSON.parse(text); } catch { }
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text}`);
+                return data;
+            }
+            async function jpost(path, payload) {
+                const resp = await fetch((base.value || "").replace(/\/$/, "") + path, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload || {})
+                });
+                const text = await resp.text();
+                let data = null; try { data = JSON.parse(text); } catch { }
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text}`);
+                return data;
+            }
+
+            async function loadAllow() {
+                nameSel.innerHTML = `<option>(loading…)</option>`;
+                try {
+                    const data = await jget("/allowlist");
+                    const names = data.allowed || [];
+                    if (names.length === 0) { nameSel.innerHTML = `<option>(empty)</option>`; return; }
+                    nameSel.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join("");
+                } catch (e) {
+                    nameSel.innerHTML = `<option>(error)</option>`;
+                    console.error(e);
+                    alert("Failed to load allowlist: " + e.message);
+                }
+            }
+            async function refreshList() {
+                body.innerHTML = `<tr><td colspan="6" class="text-center py-6 sub">(loading…)</td></tr>`;
+                try {
+                    const data = await jget("/list");
+                    const procs = data.processes || [];
+                    if (procs.length === 0) {
+                        body.innerHTML = `<tr><td colspan="6" class="text-center py-6 sub">(empty)</td></tr>`;
+                        return;
+                    }
+                    body.innerHTML = procs.map(p => `
+                        <tr class="row">
+                            <td class="px-3 py-2 mono">${p.id}</td>
+                            <td class="px-3 py-2">${p.name}</td>
+                            <td class="px-3 py-2">${p.pid}</td>
+                            <td class="px-3 py-2">${p.status}</td>
+                            <td class="px-3 py-2 break-words">${(p.cmd || []).join(" ")}</td>
+                            <td class="px-3 py-2">
+                                <button class="btn" data-stop="${p.id}">Stop</button>
+                                <button class="btn" data-tail="${p.id}">Tail</button>
+                            </td>
+                        </tr>
+                    `).join("");
+                } catch (e) {
+                    body.innerHTML = `<tr><td colspan="6" class="text-center py-6 sub">Error: ${e.message}</td></tr>`;
+                }
+            }
+            $("pm-refresh-allow").onclick = loadAllow;
+            $("pm-refresh").onclick = refreshList;
+
+            $("pm-start").onclick = async () => {
+                const name = nameSel.value;
+                let args = [];
+                const raw = argsInp.value.trim();
+                if (raw) {
+                    try { args = JSON.parse(raw); if (!Array.isArray(args)) throw new Error("args must be JSON array"); }
+                    catch (e) { alert("Args parse error: " + e.message); return; }
+                }
+                try {
+                    const res = await jpost("/start", { name, args });
+                    await refreshList();
+                    tailId.value = res.id;
+                    alert(`Started '${name}' (id: ${res.id}, pid: ${res.pid})`);
+                } catch (e) {
+                    alert("Start failed: " + e.message);
+                }
+            };
+
+            body.addEventListener("click", async (ev) => {
+                const idStop = ev.target.getAttribute("data-stop");
+                const idTail = ev.target.getAttribute("data-tail");
+                if (idStop) {
+                    try {
+                        await jpost("/stop", { id: idStop });
+                        await refreshList();
+                    } catch (e) { alert("Stop failed: " + e.message); }
+                }
+                if (idTail) {
+                    tailId.value = idTail;
+                    $("pm-tail-btn").click();
+                }
+            });
+
+            $("pm-tail-btn").onclick = async () => {
+                const id = tailId.value.trim();
+                const n = parseInt(tailLines.value || "200", 10) || 200;
+                if (!id) { alert("Enter a process id to tail."); return; }
+                try {
+                    const data = await jget(`/tail?id=${encodeURIComponent(id)}&lines=${n}`);
+                    logBox.textContent = (data.lines || []).join("\n") || "(no output)";
+                } catch (e) {
+                    logBox.textContent = "Tail error: " + e.message;
+                }
+            };
+
+            const _show = window.show;
+            window.show = (panelId, title) => {
+                _show(panelId, title);
+                if (panelId === "panel-proc") {
+                    loadAllow(); refreshList();
+                }
+            };
+        })();
+    </script>
+</body>
+</html>
