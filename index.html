@@ -523,8 +523,36 @@
             </section>
 
             <!-- Map Roulette -->
-            <section id="panel-maproulette" class="card p-4 space-y-3 hidden">
-                <p class="sub">Map Roulette controls are not documented by the API reference. Customize this panel when the endpoint becomes available.</p>
+            <section id="panel-maproulette" class="card p-4 space-y-4 hidden">
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="sub block mb-1" for="mr-pool">Map pool (one map per line)</label>
+                        <textarea id="mr-pool" class="input mono" rows="12" spellcheck="false" placeholder="Castle\nBattlefield\nJunk Yard"></textarea>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="mr-defaults" class="btn">Load defaults</button>
+                            <button id="mr-clear" class="btn">Clear</button>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="sub block mb-1" for="mr-count">Maps per spin</label>
+                            <input id="mr-count" type="number" min="1" max="5" value="1" class="input">
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="mr-spin" class="btn btn-primary">Spin</button>
+                            <button id="mr-reset" class="btn">Reset history</button>
+                        </div>
+                        <div class="card p-3">
+                            <div class="sub uppercase tracking-wide text-[11px]">Current result</div>
+                            <div id="mr-result" class="text-lg font-semibold mt-1">(no spins yet)</div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-1">Recent spins</h4>
+                            <ol id="mr-history" class="list-decimal list-inside space-y-1 text-sm"></ol>
+                        </div>
+                        <div id="mr-status" class="sub"></div>
+                    </div>
+                </div>
             </section>
 
             <!-- Process Manager -->
@@ -610,6 +638,25 @@
             jwt: "lat:jwt",
             jwtMode: "lat:jwtMode"
         });
+
+        const MAP_ROULETTE_DEFAULT_POOL = Object.freeze([
+            "Battlefield",
+            "Castle",
+            "Castle Keep",
+            "Junk Yard",
+            "Power Plant",
+            "Toy Garden",
+            "Toy Palace",
+            "Toy Warehouse",
+            "Seaport",
+            "Sewer",
+            "Academy",
+            "Factory",
+            "Cargo",
+            "Mine",
+            "Wild West",
+            "Ghost Town"
+        ]);
 
         const storage = (() => {
             let enabled = false;
@@ -1544,6 +1591,120 @@
                 });
             }
         })();
+
+        /* ===== Tournaments: Map Roulette ===== */
+        (function () {
+            const poolArea = document.getElementById('mr-pool');
+            const defaultsBtn = document.getElementById('mr-defaults');
+            const clearBtn = document.getElementById('mr-clear');
+            const countInput = document.getElementById('mr-count');
+            const spinBtn = document.getElementById('mr-spin');
+            const resetBtn = document.getElementById('mr-reset');
+            const resultEl = document.getElementById('mr-result');
+            const historyEl = document.getElementById('mr-history');
+            const statusEl = document.getElementById('mr-status');
+            if (!poolArea || !resultEl) return;
+
+            const MAX_HISTORY = 20;
+            let history = [];
+
+            const clampCount = (value) => {
+                const num = Number.isFinite(value) ? value : 1;
+                return Math.max(1, Math.min(5, Math.floor(num)));
+            };
+
+            const readPool = () => {
+                return poolArea.value
+                    .split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(Boolean);
+            };
+
+            const renderHistory = () => {
+                if (!historyEl) return;
+                if (!history.length) {
+                    historyEl.innerHTML = '<li class="sub list-none">(no spins yet)</li>';
+                    return;
+                }
+                historyEl.innerHTML = history
+                    .map(entry => `<li>${escapeHtml(entry.join(', '))}</li>`)
+                    .join('');
+            };
+
+            const setResult = (picks) => {
+                if (!picks.length) {
+                    resultEl.textContent = '(no spins yet)';
+                    return;
+                }
+                resultEl.textContent = picks.join(', ');
+            };
+
+            const spin = () => {
+                const maps = readPool();
+                if (!maps.length) {
+                    setStatus(statusEl, 'Add at least one map before spinning.', 'error');
+                    return;
+                }
+                const countRaw = parseInt(countInput.value, 10);
+                const drawCount = clampCount(Number.isFinite(countRaw) ? countRaw : 1);
+                countInput.value = drawCount;
+
+                const available = maps.slice();
+                const picks = [];
+                for (let i = 0; i < drawCount && available.length; i++) {
+                    const idx = Math.floor(Math.random() * available.length);
+                    const [choice] = available.splice(idx, 1);
+                    picks.push(choice);
+                }
+                if (!picks.length) {
+                    setStatus(statusEl, 'Unable to spin with the current pool.', 'error');
+                    return;
+                }
+
+                history.unshift(picks);
+                if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+                setResult(picks);
+                renderHistory();
+                setStatus(statusEl, `Selected ${picks.length} map${picks.length === 1 ? '' : 's'}.`, 'success');
+            };
+
+            if (defaultsBtn) {
+                defaultsBtn.addEventListener('click', () => {
+                    poolArea.value = MAP_ROULETTE_DEFAULT_POOL.join('\n');
+                    setStatus(statusEl, 'Loaded default maps.', 'success');
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    poolArea.value = '';
+                    setStatus(statusEl, 'Cleared map pool.', 'info');
+                });
+            }
+
+            if (spinBtn) {
+                spinBtn.addEventListener('click', () => {
+                    setStatus(statusEl, 'Spinning...');
+                    spin();
+                });
+            }
+
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    history = [];
+                    renderHistory();
+                    setResult([]);
+                    setStatus(statusEl, 'History cleared.', 'success');
+                });
+            }
+
+            if (!poolArea.value) {
+                poolArea.value = MAP_ROULETTE_DEFAULT_POOL.join('\n');
+            }
+            renderHistory();
+            setResult([]);
+        })();
+
 
         /* ===== Process Manager ===== */
         (function () {
