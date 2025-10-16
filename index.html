@@ -1,0 +1,1844 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Admin Panel</title>
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            background: #0a0a0a;
+        }
+
+        .card {
+            border: 1px solid #1f2937;
+            background: #0f0f10;
+            border-radius: 16px;
+        }
+
+        .input {
+            background: #0b0b0c;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 10px 12px;
+            width: 100%;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
+            outline: none;
+        }
+
+        .input.invalid {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.35);
+        }
+
+        .btn {
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 10px 14px;
+            transition: background 0.2s ease, border 0.2s ease, transform 0.15s ease;
+        }
+
+        .btn:hover:not(:disabled) {
+            border-color: #374151;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #1d4ed8;
+        }
+
+        .btn:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sub {
+            color: #9ca3af;
+            font-size: 12px;
+        }
+
+        .status-success {
+            color: #34d399;
+        }
+
+        .status-error {
+            color: #f87171;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+        }
+
+        .navbtn.active {
+            background: #2563eb;
+            color: white;
+        }
+
+        .table-head {
+            background: #0a0a0a;
+        }
+
+        .row {
+            border-top: 1px solid #1f2937;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 900px) {
+            .grid2 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="text-neutral-100">
+    <div class="min-h-screen flex">
+        <!-- Sidebar -->
+        <aside class="w-72 p-4 border-r border-neutral-800">
+            <h1 class="font-bold text-lg mb-1">Local Admin Panel</h1>
+            <div class="sub mb-4">Base URL<br><span class="mono text-[11px]" id="baseUrlLabel">http://127.0.0.1:5501</span></div>
+            <nav id="nav" class="space-y-2"></nav>
+        </aside>
+
+        <!-- Main -->
+        <main class="flex-1 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 id="panelTitle" class="text-xl font-bold">Rewards</h2>
+                    <p class="sub">Dates use your local timezone → epoch seconds</p>
+                </div>
+            </div>
+
+            <!-- Rewards -->
+            <section id="panel-rewards" class="card p-4 space-y-3">
+                <div class="grid2">
+                    <div>
+                        <label class="sub block mb-1" for="rw-nick">Player nickname</label>
+                        <input id="rw-nick" class="input" placeholder="e.g. Microvolts" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="rw-defmsg">Default message</label>
+                        <input id="rw-defmsg" class="input" value="Admin reward" autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold">Items</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="rw-paste-toggle" class="btn" data-rw-lock>Paste list</button>
+                        <button id="rw-add" class="btn" data-rw-lock>+ Add row</button>
+                        <button id="rw-reset" class="btn" data-rw-lock>Reset rows</button>
+                    </div>
+                </div>
+
+                <div id="rw-paste" class="hidden">
+                    <div class="card p-3">
+                        <p class="sub mb-2">
+                            New format (preferred): one <span class="mono">7-digit</span> item ID per line, optional trailing comma:<br>
+                            <span class="mono">8200004,</span><br><span class="mono">8001108,</span>
+                        </p>
+                        <p class="sub mb-2">Legacy also works: <span class="mono">1234567x3</span> or <span class="mono">1234567,3</span></p>
+                        <textarea id="rw-paste-area" rows="6" class="input" placeholder="8200004,&#10;8001108,&#10;8000000,"></textarea>
+                        <div class="mt-2 flex gap-2">
+                            <button id="rw-parse" class="btn" data-rw-lock>Parse</button>
+                            <button id="rw-paste-clear" class="btn" data-rw-lock>Clear</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">Item ID</th>
+                                <th class="text-left px-3 py-2">Qty</th>
+                                <th class="text-left px-3 py-2">Message (optional)</th>
+                                <th class="text-left px-3 py-2">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rw-rows"></tbody>
+                    </table>
+                </div>
+
+                <div class="sub" id="rw-stats">Valid rows: 0 • Total API requests: 0</div>
+
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="rw-send" class="btn btn-primary" data-rw-lock>Send rewards</button>
+                    <button id="rw-cancel" class="btn hidden">Cancel sending</button>
+                    <div class="sub" id="rw-progress" role="status" aria-live="polite"></div>
+                </div>
+
+                <div class="overflow-auto mt-2">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">#</th>
+                                <th class="text-left px-3 py-2">ItemID</th>
+                                <th class="text-left px-3 py-2">Message</th>
+                                <th class="text-left px-3 py-2">Status</th>
+                                <th class="text-left px-3 py-2">Response</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rw-log"><tr><td colspan="5" class="text-center py-6 sub">(empty)</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- User Info -->
+            <section id="panel-user" class="card p-4 space-y-3 hidden">
+                <div class="grid2">
+                    <div>
+                        <label class="sub block mb-1" for="user-nick">Target nickname</label>
+                        <input id="user-nick" class="input" placeholder="Optional" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="user-account">Target account ID</label>
+                        <input id="user-account" class="input" placeholder="Optional" autocomplete="off">
+                    </div>
+                </div>
+                <p class="sub">Provide either a nickname or an account ID (nickname takes priority if both are filled).</p>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="user-fetch" class="btn btn-primary">Fetch info</button>
+                    <button id="user-clear" class="btn">Clear</button>
+                    <div id="user-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="user-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no data)</pre>
+            </section>
+
+            <!-- Ban / CheatBan / Mute -->
+            <section id="panel-ban" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="ban-action">Action</label>
+                        <select id="ban-action" class="input">
+                            <option value="ban">Ban</option>
+                            <option value="cheatban">CheatBan</option>
+                            <option value="mute">Mute</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="ban-target-type">Target type</label>
+                        <select id="ban-target-type" class="input">
+                            <option value="nickname">Nickname</option>
+                            <option value="account">Account ID</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="ban-target">Target value</label>
+                        <input id="ban-target" class="input" placeholder="Nickname or ID" autocomplete="off">
+                    </div>
+                </div>
+                <p class="sub">Mute shares the same endpoint format and requires the same permissions as ban actions.</p>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="ban-submit" class="btn btn-primary">Send action</button>
+                    <div id="ban-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="ban-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no response yet)</pre>
+            </section>
+
+            <!-- Disconnect -->
+            <section id="panel-disconnect" class="card p-4 space-y-3 hidden">
+                <div class="grid2">
+                    <div>
+                        <label class="sub block mb-1" for="dc-nick">Target nickname</label>
+                        <input id="dc-nick" class="input" placeholder="Optional" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="dc-account">Target account ID</label>
+                        <input id="dc-account" class="input" placeholder="Optional" autocomplete="off">
+                    </div>
+                </div>
+                <p class="sub">Provide at least one identifier to disconnect a player from the server.</p>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="dc-submit" class="btn btn-primary">Disconnect</button>
+                    <div id="dc-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="dc-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no response yet)</pre>
+            </section>
+
+            <!-- Kick (Room) -->
+            <section id="panel-kick" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div class="md:col-span-2">
+                        <label class="sub block mb-1" for="kick-nick">Target nickname</label>
+                        <input id="kick-nick" class="input" placeholder="Nickname" autocomplete="off">
+                    </div>
+                </div>
+                <p class="sub">Kicks the player from their current room (server-side validation applies).</p>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="kick-submit" class="btn btn-primary">Kick player</button>
+                    <div id="kick-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="kick-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no response yet)</pre>
+            </section>
+
+            <!-- Announce / Tip -->
+            <section id="panel-announce" class="card p-4 space-y-3 hidden">
+                <div class="grid2">
+                    <div>
+                        <label class="sub block mb-1" for="an-endpoint">Endpoint</label>
+                        <select id="an-endpoint" class="input">
+                            <option value="/announce">/announce</option>
+                            <option value="/tip">/tip</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="an-text">Text (max 512 chars)</label>
+                        <textarea id="an-text" class="input" rows="3" maxlength="512" placeholder="Your message..."></textarea>
+                        <div class="sub"><span id="an-count">0</span> / 512</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="an-send" class="btn btn-primary">Send</button>
+                    <div id="an-result" class="sub" role="status" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <!-- Capsule Event -->
+            <section id="panel-capsule" class="card p-4 space-y-3 hidden">
+                <p class="sub">Configure capsule event availability and prices (values are sent as epoch seconds and integers).</p>
+                <div class="grid md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="capsule-start">Start (local)</label>
+                        <input id="capsule-start" class="input" type="datetime-local">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="capsule-end">End (local)</label>
+                        <input id="capsule-end" class="input" type="datetime-local">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="capsule-mp">MP price</label>
+                        <input id="capsule-mp" class="input" type="number" min="0" step="1" value="0">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="capsule-rt">RT price</label>
+                        <input id="capsule-rt" class="input" type="number" min="0" step="1" value="0">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="capsule-send" class="btn btn-primary">Update capsule event</button>
+                    <div id="capsule-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <!-- EXP / MP Event -->
+            <section id="panel-expmp" class="card p-4 space-y-3 hidden">
+                <p class="sub">Set bonus windows and percentages for EXP / MP events.</p>
+                <div class="grid md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="expmp-start">Start (local)</label>
+                        <input id="expmp-start" class="input" type="datetime-local">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="expmp-end">End (local)</label>
+                        <input id="expmp-end" class="input" type="datetime-local">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="expmp-exp">EXP bonus %</label>
+                        <input id="expmp-exp" class="input" type="number" min="0" max="500" step="1" value="0">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="expmp-mp">MP bonus %</label>
+                        <input id="expmp-mp" class="input" type="number" min="0" max="500" step="1" value="0">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="expmp-send" class="btn btn-primary">Update EXP/MP event</button>
+                    <div id="expmp-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <!-- Event Mission -->
+            <section id="panel-eventmission" class="card p-4 space-y-3 hidden">
+                <p class="sub">Enable or disable the event mission window.</p>
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="mission-start">Start (local)</label>
+                        <input id="mission-start" class="input" type="datetime-local">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="mission-end">End (local)</label>
+                        <input id="mission-end" class="input" type="datetime-local">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="mission-send" class="btn btn-primary">Update event mission</button>
+                    <div id="mission-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <!-- Trade System -->
+            <section id="panel-trade" class="card p-4 space-y-3 hidden">
+                <p class="sub">Control the trade system availability.</p>
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="trade-start">Start (local)</label>
+                        <input id="trade-start" class="input" type="datetime-local">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="trade-end">End (local)</label>
+                        <input id="trade-end" class="input" type="datetime-local">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="trade-send" class="btn btn-primary">Update trade system</button>
+                    <div id="trade-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <!-- Rooms (All) -->
+            <section id="panel-rooms" class="card p-4 space-y-3 hidden">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="rooms-refresh" class="btn btn-primary">Refresh rooms</button>
+                    <div id="rooms-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">#</th>
+                                <th class="text-left px-3 py-2">Title</th>
+                                <th class="text-left px-3 py-2">Players</th>
+                                <th class="text-left px-3 py-2">Max</th>
+                                <th class="text-left px-3 py-2">Password</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rooms-body"><tr><td colspan="5" class="text-center py-6 sub">(empty)</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Room Info -->
+            <section id="panel-roominfo" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="roominfo-number">Room number</label>
+                        <input id="roominfo-number" class="input" placeholder="e.g. 42" autocomplete="off">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="roominfo-fetch" class="btn btn-primary">Fetch info</button>
+                    <div id="roominfo-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="roominfo-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no data)</pre>
+            </section>
+
+            <!-- Change Host -->
+            <section id="panel-changehost" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div class="md:col-span-2">
+                        <label class="sub block mb-1" for="changehost-nick">New host nickname</label>
+                        <input id="changehost-nick" class="input" placeholder="Nickname" autocomplete="off">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="changehost-submit" class="btn btn-primary">Change host</button>
+                    <div id="changehost-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="changehost-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no response yet)</pre>
+            </section>
+
+            <!-- Change Room Title -->
+            <section id="panel-changeroomtitle" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="changeroom-number">Room number</label>
+                        <input id="changeroom-number" class="input" placeholder="e.g. 42" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="changeroom-title">New title</label>
+                        <input id="changeroom-title" class="input" maxlength="29" placeholder="Max 29 chars" autocomplete="off">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="changeroom-submit" class="btn btn-primary">Update title</button>
+                    <div id="changeroom-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="changeroom-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no response yet)</pre>
+            </section>
+
+            <!-- Break Room -->
+            <section id="panel-breakroom" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="breakroom-number">Room number</label>
+                        <input id="breakroom-number" class="input" placeholder="e.g. 42" autocomplete="off">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="breakroom-submit" class="btn btn-primary">Break room</button>
+                    <div id="breakroom-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <pre id="breakroom-output" class="text-xs whitespace-pre-wrap bg-black/40 rounded-lg p-3 border border-neutral-800">(no response yet)</pre>
+            </section>
+
+            <!-- Online Players -->
+            <section id="panel-online" class="card p-4 space-y-3 hidden">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="online-refresh" class="btn btn-primary">Refresh list</button>
+                    <div id="online-status" class="sub" role="status" aria-live="polite"></div>
+                </div>
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">Nickname</th>
+                                <th class="text-left px-3 py-2">Session ID</th>
+                                <th class="text-left px-3 py-2">Account ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="online-body"><tr><td colspan="3" class="text-center py-6 sub">(empty)</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Chat Logs -->
+            <section id="panel-chatlogs" class="card p-4 space-y-3 hidden">
+                <p class="sub">Chat log retrieval is not yet available in this build. Add your endpoint handling here once exposed by the server.</p>
+            </section>
+
+            <!-- Map Roulette -->
+            <section id="panel-maproulette" class="card p-4 space-y-4 hidden">
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="sub block mb-1" for="mr-pool">Map pool (one map per line)</label>
+                        <textarea id="mr-pool" class="input mono" rows="12" spellcheck="false" placeholder="Castle\nBattlefield\nJunk Yard"></textarea>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="mr-defaults" class="btn">Load defaults</button>
+                            <button id="mr-clear" class="btn">Clear</button>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="sub block mb-1" for="mr-count">Maps per spin</label>
+                            <input id="mr-count" type="number" min="1" max="5" value="1" class="input">
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="mr-spin" class="btn btn-primary">Spin</button>
+                            <button id="mr-reset" class="btn">Reset history</button>
+                        </div>
+                        <div class="card p-3">
+                            <div class="sub uppercase tracking-wide text-[11px]">Current result</div>
+                            <div id="mr-result" class="text-lg font-semibold mt-1">(no spins yet)</div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-1">Recent spins</h4>
+                            <ol id="mr-history" class="list-decimal list-inside space-y-1 text-sm"></ol>
+                        </div>
+                        <div id="mr-status" class="sub"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Process Manager -->
+            <section id="panel-proc" class="card p-4 space-y-3 hidden">
+                <div class="grid md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="sub block mb-1" for="pm-base">Launcher Base URL</label>
+                        <input id="pm-base" class="input" value="http://127.0.0.1:5599">
+                        <div class="sub">Run: <span class="mono">python proc_launcher.py --port 5599</span></div>
+                    </div>
+                    <div>
+                        <label class="sub block mb-1" for="pm-name">Allowed programs</label>
+                        <div class="flex gap-2">
+                            <select id="pm-name" class="input"></select>
+                            <button id="pm-refresh-allow" class="btn">Refresh</button>
+                        </div>
+                        <div class="sub mt-1">Optional args (JSON array):</div>
+                        <input id="pm-args" class="input mono" placeholder='["--example","arg"]'>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button id="pm-start" class="btn btn-primary w-full">Start</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold">Running Processes</h3>
+                    <div class="flex gap-2">
+                        <button id="pm-refresh" class="btn">Refresh</button>
+                    </div>
+                </div>
+
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="table-head">
+                            <tr>
+                                <th class="text-left px-3 py-2">ID</th>
+                                <th class="text-left px-3 py-2">Name</th>
+                                <th class="text-left px-3 py-2">PID</th>
+                                <th class="text-left px-3 py-2">Status</th>
+                                <th class="text-left px-3 py-2">Cmd</th>
+                                <th class="text-left px-3 py-2">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pm-body"><tr><td colspan="6" class="text-center py-6 sub">(empty)</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3">
+                    <label class="sub block mb-1" for="pm-tail-id">Selected process log (tail)</label>
+                    <div class="flex gap-2 mb-2 flex-wrap">
+                        <input id="pm-tail-id" class="input mono" placeholder="process id to tail">
+                        <input id="pm-tail-lines" class="input" style="width:110px" value="200">
+                        <button id="pm-tail-btn" class="btn">Tail</button>
+                    </div>
+                    <pre id="pm-log" class="text-xs whitespace-pre-wrap">(no output)</pre>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="mt-8 pt-4 border-t border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div class="sub">Made by <span class="font-semibold">CriseStudios</span></div>
+                <div>
+                    <button id="jwt-toggle" class="btn">Show JWT</button>
+                    <div id="jwt-box" class="hidden mt-2 card p-3">
+                        <div class="sub mb-1">Use hardcoded JWT (toggle off to paste your own)</div>
+                        <label class="sub flex items-center gap-2 mb-2"><input id="jwt-hardcoded" type="checkbox" checked> hardcoded</label>
+                        <input id="jwt-input" class="input" value="">
+                        <div class="sub mt-2">Header sent: <span class="mono">Authorization: Bearer &lt;JWT&gt;</span></div>
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        /* ====== CONFIG ====== */
+        const BASE_URL = "http://127.0.0.1:5501";
+        const HARDCODED_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMjMsInVzZXJuYW1lIjoibWF4Lm11c3Rlcm1hbm4iLCJyb2xlIjo3fQ.BaPE3_nu41D_Sk5pK2FckGY222BmnWbVsPxBm5wkH8k";
+        const STORAGE_KEYS = Object.freeze({
+            rewardsRows: "lat:rewardsRows",
+            rewardsDefaults: "lat:rewardsDefaults",
+            lastPanel: "lat:lastPanel",
+            jwt: "lat:jwt",
+            jwtMode: "lat:jwtMode"
+        });
+
+        const MAP_ROULETTE_DEFAULT_POOL = Object.freeze([
+            "Battlefield",
+            "Castle",
+            "Castle Keep",
+            "Junk Yard",
+            "Power Plant",
+            "Toy Garden",
+            "Toy Palace",
+            "Toy Warehouse",
+            "Seaport",
+            "Sewer",
+            "Academy",
+            "Factory",
+            "Cargo",
+            "Mine",
+            "Wild West",
+            "Ghost Town"
+        ]);
+
+        const storage = (() => {
+            let enabled = false;
+            try {
+                const testKey = "lat:test";
+                window.localStorage.setItem(testKey, "1");
+                window.localStorage.removeItem(testKey);
+                enabled = true;
+            } catch (err) {
+                console.warn("localStorage disabled:", err);
+            }
+            return {
+                enabled,
+                get(key, fallback) {
+                    if (!enabled) return fallback;
+                    try {
+                        const raw = window.localStorage.getItem(key);
+                        return raw === null ? fallback : JSON.parse(raw);
+                    } catch (err) {
+                        console.warn("Failed to read storage", key, err);
+                        return fallback;
+                    }
+                },
+                set(key, value) {
+                    if (!enabled) return;
+                    try {
+                        window.localStorage.setItem(key, JSON.stringify(value));
+                    } catch (err) {
+                        console.warn("Failed to persist storage", key, err);
+                    }
+                }
+            };
+        })();
+
+        /* ====== JWT FOOTER ====== */
+        const jwtToggle = document.getElementById('jwt-toggle');
+        const jwtBox = document.getElementById('jwt-box');
+        const jwtHard = document.getElementById('jwt-hardcoded');
+        const jwtInput = document.getElementById('jwt-input');
+        jwtInput.value = HARDCODED_JWT;
+        jwtToggle.onclick = () => jwtBox.classList.toggle('hidden');
+        function getJWT() { return jwtHard.checked ? HARDCODED_JWT : (jwtInput.value || "").trim(); }
+
+        (function initJwtPersistence() {
+            const savedMode = storage.get(STORAGE_KEYS.jwtMode, "hardcoded");
+            const savedJwt = storage.get(STORAGE_KEYS.jwt, HARDCODED_JWT);
+            if (savedMode === "custom") {
+                jwtHard.checked = false;
+                jwtInput.value = typeof savedJwt === "string" ? savedJwt : "";
+            }
+            jwtInput.disabled = jwtHard.checked;
+
+            jwtHard.addEventListener('change', () => {
+                jwtInput.disabled = jwtHard.checked;
+                storage.set(STORAGE_KEYS.jwtMode, jwtHard.checked ? "hardcoded" : "custom");
+            });
+            jwtInput.addEventListener('input', () => {
+                if (!jwtHard.checked) {
+                    storage.set(STORAGE_KEYS.jwt, jwtInput.value || "");
+                }
+            });
+        })();
+
+        /* ====== NAV ====== */
+        const baseLabel = document.getElementById('baseUrlLabel');
+        if (baseLabel) baseLabel.textContent = BASE_URL;
+
+        const navContainer = document.getElementById('nav');
+        function addSectionHeader(text) {
+            const h = document.createElement('div');
+            h.className = "sub uppercase tracking-wide text-[11px] mt-4 mb-1";
+            h.textContent = text;
+            navContainer.appendChild(h);
+        }
+        function addNavBtn(label, panelId) {
+            const targetExists = !!document.getElementById(panelId);
+            if (!targetExists) return;
+            const b = document.createElement('button');
+            b.className = "btn navbtn w-full text-left";
+            b.textContent = label;
+            b.dataset.target = panelId;
+            b.onclick = () => show(panelId, label);
+            navContainer.appendChild(b);
+        }
+        const NAV_GROUPS = [
+            { title: "Players", items: [
+                ["Rewards", "panel-rewards"],
+                ["User Info", "panel-user"],
+                ["Ban / CheatBan / Mute", "panel-ban"],
+                ["Disconnect", "panel-disconnect"],
+                ["Kick (Room)", "panel-kick"],
+            ] },
+            { title: "Broadcast", items: [
+                ["Announce / Tip", "panel-announce"],
+            ] },
+            { title: "Events", items: [
+                ["Capsule Event", "panel-capsule"],
+                ["EXP / MP Event", "panel-expmp"],
+                ["Event Mission", "panel-eventmission"],
+                ["Trade System", "panel-trade"],
+            ] },
+            { title: "Rooms", items: [
+                ["Rooms (All)", "panel-rooms"],
+                ["Room Info", "panel-roominfo"],
+                ["Change Host", "panel-changehost"],
+                ["Change Room Title", "panel-changeroomtitle"],
+                ["Break Room", "panel-breakroom"],
+            ] },
+            { title: "Monitoring", items: [
+                ["Online Players", "panel-online"],
+                ["Chat Logs", "panel-chatlogs"],
+            ] },
+            { title: "Tournaments", items: [
+                ["Map Roulette", "panel-maproulette"],
+            ] },
+            { title: "Utilities", items: [
+                ["Process Manager", "panel-proc"],
+            ] },
+        ];
+        NAV_GROUPS.forEach(group => {
+            const existingItems = group.items.filter(([, id]) => document.getElementById(id));
+            if (existingItems.length === 0) return;
+            addSectionHeader(group.title);
+            existingItems.forEach(([label, id]) => addNavBtn(label, id));
+        });
+
+        function show(panelId, title) {
+            const target = document.getElementById(panelId);
+            if (!target) {
+                console.warn(`Panel '${panelId}' was requested but is missing in the DOM.`);
+                const fallback = navContainer.querySelector('.navbtn');
+                if (fallback) {
+                    const fbId = fallback.dataset.target;
+                    const fbTitle = fallback.textContent || '';
+                    if (fbId && fbId !== panelId) {
+                        show(fbId, fbTitle);
+                    }
+                }
+                return;
+            }
+            document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+            target.classList.remove('hidden');
+            document.getElementById('panelTitle').textContent = title;
+            document.querySelectorAll('#nav .navbtn').forEach(b => b.classList.remove('active'));
+            const act = document.querySelector(`#nav .navbtn[data-target="${panelId}"]`);
+            if (act) act.classList.add('active');
+            storage.set(STORAGE_KEYS.lastPanel, { panelId, title });
+        }
+
+        const savedPanel = storage.get(STORAGE_KEYS.lastPanel, null);
+        if (savedPanel && document.getElementById(savedPanel.panelId)) {
+            show(savedPanel.panelId, savedPanel.title);
+        } else {
+            show("panel-rewards", "Rewards");
+        }
+
+        /* ====== Helpers shared ====== */
+        function setStatus(el, message, type = "info") {
+            if (!el) return;
+            el.textContent = message || "";
+            el.classList.remove("status-success", "status-error");
+            if (!message) return;
+            if (type === "success") el.classList.add("status-success");
+            else if (type === "error") el.classList.add("status-error");
+        }
+
+        function formatJson(value) {
+            if (value === null || value === undefined) return "";
+            if (typeof value === "string") {
+                try { return JSON.stringify(JSON.parse(value), null, 2); }
+                catch { return value; }
+            }
+            try { return JSON.stringify(value, null, 2); }
+            catch { return String(value); }
+        }
+
+        function renderResponse(el, payload, emptyLabel = "(empty response)") {
+            if (!el) return;
+            if (payload === undefined || payload === null || payload === "") {
+                el.textContent = emptyLabel;
+                return;
+            }
+            el.textContent = formatJson(payload);
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function toEpoch(dtLocalStr) {
+            if (!dtLocalStr) return NaN;
+            const d = new Date(dtLocalStr.replace(' ', 'T'));
+            const t = d.getTime();
+            if (isNaN(t)) return NaN;
+            return Math.floor(t / 1000);
+        }
+        async function postJson(path, body) {
+            const url = BASE_URL + path;
+            const resp = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json, text/plain, */*",
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + getJWT()
+                },
+                body: JSON.stringify(body || {})
+            });
+            const text = await resp.text();
+            let data = null; try { data = JSON.parse(text); } catch { }
+            return { ok: resp.ok, status: resp.status, data, text };
+        }
+        async function getJson(path) {
+            const url = BASE_URL + path;
+            const resp = await fetch(url, { headers: { "Authorization": "Bearer " + getJWT() } });
+            const text = await resp.text();
+            let data = null; try { data = JSON.parse(text); } catch { }
+            return { ok: resp.ok, status: resp.status, data, text };
+        }
+
+        /* ====== Rewards ====== */
+        const defaultRow = () => ({ itemId: "", qty: 1, msg: "" });
+        const rwNick = document.getElementById('rw-nick');
+        const rwDefMsg = document.getElementById('rw-defmsg');
+        const rwRows = document.getElementById('rw-rows');
+        const rwStats = document.getElementById('rw-stats');
+        const rwProgress = document.getElementById('rw-progress');
+        const rwLog = document.getElementById('rw-log');
+        const rwAdd = document.getElementById('rw-add');
+        const rwReset = document.getElementById('rw-reset');
+        const rwSend = document.getElementById('rw-send');
+        const rwCancel = document.getElementById('rw-cancel');
+        const rwPasteToggle = document.getElementById('rw-paste-toggle');
+        const rwPasteBox = document.getElementById('rw-paste');
+        const rwPasteArea = document.getElementById('rw-paste-area');
+        const rwParse = document.getElementById('rw-parse');
+        const rwPasteClear = document.getElementById('rw-paste-clear');
+
+        const savedDefaults = storage.get(STORAGE_KEYS.rewardsDefaults, {});
+        if (savedDefaults.nick) rwNick.value = savedDefaults.nick;
+        if (savedDefaults.defmsg) rwDefMsg.value = savedDefaults.defmsg;
+
+        let rows = storage.get(STORAGE_KEYS.rewardsRows, null);
+        if (!Array.isArray(rows) || rows.length === 0) {
+            rows = [defaultRow()];
+        } else {
+            rows = rows.map(r => ({
+                itemId: typeof r.itemId === 'string' ? r.itemId : "",
+                qty: Number.isInteger(r.qty) && r.qty > 0 ? r.qty : 1,
+                msg: typeof r.msg === 'string' ? r.msg : ""
+            }));
+        }
+
+        function persistRewardsState() {
+            storage.set(STORAGE_KEYS.rewardsRows, rows);
+            storage.set(STORAGE_KEYS.rewardsDefaults, {
+                nick: rwNick.value || "",
+                defmsg: rwDefMsg.value || ""
+            });
+        }
+
+        function ensurePlaceholderRow() {
+            if (rows.length === 0) {
+                rows.push(defaultRow());
+            }
+        }
+
+        function applyRowValidity() {
+            const trList = Array.from(rwRows.querySelectorAll('tr'));
+            trList.forEach((tr, idx) => {
+                const row = rows[idx];
+                if (!row) return;
+                const itemInput = tr.querySelector('input[data-k="itemId"]');
+                const qtyInput = tr.querySelector('input[data-k="qty"]');
+                const isItemValid = String(row.itemId).trim().length > 0;
+                const isQtyValid = Number.isInteger(row.qty) && row.qty > 0;
+                if (itemInput) itemInput.classList.toggle('invalid', !isItemValid);
+                if (qtyInput) qtyInput.classList.toggle('invalid', !isQtyValid);
+            });
+        }
+
+        function refreshStats() {
+            const valid = rows.filter(r => String(r.itemId).trim() !== "" && (parseInt(r.qty, 10) || 0) > 0);
+            const totalReq = valid.reduce((s, r) => s + Math.max(1, parseInt(r.qty, 10) || 1), 0);
+            const invalidCount = rows.length - valid.length;
+            let text = `Valid rows: ${valid.length} • Total API requests: ${totalReq}`;
+            if (invalidCount > 0) {
+                text += ` • Invalid rows: ${invalidCount}`;
+            }
+            rwStats.textContent = text;
+            applyRowValidity();
+        }
+
+        function renderRows() {
+            rwRows.innerHTML = "";
+            rows.forEach((r, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "row";
+                tr.innerHTML = `
+                    <td class="px-3 py-2"><input data-k="itemId" data-i="${idx}" class="input" value="${r.itemId}" placeholder="1000000" autocomplete="off"></td>
+                    <td class="px-3 py-2"><input data-k="qty" data-i="${idx}" class="input" type="number" min="1" value="${r.qty}"></td>
+                    <td class="px-3 py-2"><input data-k="msg" data-i="${idx}" class="input" value="${r.msg || ""}" placeholder="optional override" autocomplete="off"></td>
+                    <td class="px-3 py-2"><button data-del="${idx}" class="btn" data-rw-lock>Remove</button></td>
+                `;
+                rwRows.appendChild(tr);
+            });
+            ensurePlaceholderRow();
+            refreshStats();
+            persistRewardsState();
+        }
+
+        rwRows.addEventListener('input', (e) => {
+            const k = e.target.getAttribute('data-k');
+            if (!k) return;
+            const i = parseInt(e.target.getAttribute('data-i'), 10);
+            if (Number.isNaN(i) || !rows[i]) return;
+            if (k === "itemId") {
+                rows[i].itemId = (e.target.value || "").replace(/[^0-9]/g, "");
+                e.target.value = rows[i].itemId;
+            } else if (k === "qty") {
+                const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+                rows[i].qty = v; e.target.value = v;
+            } else if (k === "msg") {
+                rows[i].msg = e.target.value;
+            }
+            refreshStats();
+            persistRewardsState();
+        });
+        rwRows.addEventListener('click', (e) => {
+            const del = e.target.getAttribute('data-del');
+            if (del !== null) {
+                rows.splice(parseInt(del, 10), 1);
+                ensurePlaceholderRow();
+                renderRows();
+            }
+        });
+        rwAdd.onclick = () => { rows.push(defaultRow()); renderRows(); };
+        rwReset.onclick = () => {
+            if (!confirm('Reset all reward rows?')) return;
+            rows = [defaultRow()];
+            renderRows();
+            rwLog.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">(empty)</td></tr>`;
+            rwProgress.textContent = "";
+        };
+        rwPasteToggle.onclick = () => rwPasteBox.classList.toggle('hidden');
+        rwPasteClear.onclick = () => rwPasteArea.value = "";
+
+        rwParse.onclick = () => {
+            const text = rwPasteArea.value || "";
+            const out = [];
+            const lines = text.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+            for (const line of lines) {
+                const tokens = line.split(/[\s]+/).map(t => t.trim()).filter(Boolean);
+                for (let tok of tokens) {
+                    tok = tok.replace(/,+$/, "");
+                    let m = tok.match(/^(\d{1,9})\s*[xX,]\s*(\d{1,4})$/);
+                    if (m) { out.push({ itemId: m[1], qty: Math.max(1, parseInt(m[2], 10)), msg: "" }); continue; }
+                    m = tok.match(/^(\d{7})$/);
+                    if (m) { out.push({ itemId: m[1], qty: 1, msg: "" }); continue; }
+                }
+            }
+            if (out.length) {
+                rows = out;
+                renderRows();
+                rwPasteBox.classList.add('hidden');
+            } else {
+                alert("No valid item IDs found.");
+            }
+        };
+
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        let sendAbort = false;
+        let sending = false;
+
+        function setSendingState(active) {
+            sending = active;
+            const lockable = document.querySelectorAll('[data-rw-lock]');
+            lockable.forEach(el => { el.disabled = active; });
+            rwCancel.classList.toggle('hidden', !active);
+            if (active) {
+                rwCancel.disabled = false;
+                rwProgress.textContent = '';
+            }
+        }
+
+        rwCancel.onclick = () => {
+            if (!sending) return;
+            sendAbort = true;
+            rwCancel.disabled = true;
+            rwProgress.textContent = 'Canceling after current request...';
+        };
+
+        rwSend.onclick = async () => {
+            const nick = (rwNick.value || "").trim();
+            const defmsg = (rwDefMsg.value || "").trim() || "Admin reward";
+
+            const valid = rows.filter(r => String(r.itemId).trim() !== "" && (parseInt(r.qty, 10) || 0) > 0);
+            const totalReq = valid.reduce((s, r) => s + Math.max(1, parseInt(r.qty, 10) || 1), 0);
+
+            if (!nick) { rwProgress.textContent = "Please enter a nickname."; return; }
+            if (valid.length === 0) { rwProgress.textContent = "Please add at least one valid item row."; return; }
+
+            setSendingState(true);
+            sendAbort = false;
+            rwProgress.textContent = "";
+            rwLog.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">(sending...)</td></tr>`;
+            rwLog.innerHTML = "";
+
+            let idx = 0, failures = 0;
+            let lastSecond = null;
+
+            async function pace() {
+                let nowMs = Date.now();
+                let nowSec = Math.floor(nowMs / 1000);
+                if (lastSecond !== null && nowSec === lastSecond) {
+                    const remainder = 1000 - (nowMs % 1000);
+                    const jitter = 50 + Math.floor(Math.random() * 100);
+                    await sleep(remainder + jitter);
+                    nowMs = Date.now();
+                    nowSec = Math.floor(nowMs / 1000);
+                } else {
+                    const jitter = 50 + Math.floor(Math.random() * 100);
+                    await sleep(jitter);
+                    nowMs = Date.now();
+                    nowSec = Math.floor(nowMs / 1000);
+                }
+                lastSecond = nowSec;
+            }
+
+            function pushLogRow(obj) {
+                if (rwLog.firstElementChild && rwLog.firstElementChild.children && rwLog.firstElementChild.children.length === 1) {
+                    rwLog.innerHTML = "";
+                }
+                const tr = document.createElement('tr');
+                tr.className = "row";
+                tr.innerHTML = `
+                    <td class="px-3 py-2">${obj.idx}</td>
+                    <td class="px-3 py-2">${obj.itemId}</td>
+                    <td class="px-3 py-2 break-words max-w-[320px]">${obj.message}</td>
+                    <td class="px-3 py-2">${obj.status}</td>
+                    <td class="px-3 py-2 break-words max-w-[360px]">${(typeof obj.response === "string") ? obj.response : JSON.stringify(obj.response)}</td>
+                `;
+                rwLog.appendChild(tr);
+            }
+
+            try {
+                for (const r of valid) {
+                    const itemId = parseInt(r.itemId, 10);
+                    const qty = Math.max(1, parseInt(r.qty, 10) || 1);
+                    const msg = (r.msg && r.msg.trim()) ? r.msg : defmsg;
+
+                    for (let c = 0; c < qty; c++) {
+                        if (sendAbort) break;
+                        idx++;
+                        await pace();
+                        try {
+                            const { ok, status, data, text } = await postJson("/sendreward", {
+                                Nickname: nick,
+                                ItemID: String(itemId),
+                                Message: msg
+                            });
+                            pushLogRow({ idx, itemId, message: msg, status: ok ? "ok" : `HTTP ${status}`, response: data || text || "" });
+                            if (!ok) failures++;
+                        } catch (err) {
+                            failures++;
+                            pushLogRow({ idx, itemId, message: msg, status: `HTTP ${err.status || "ERR"}`, response: err.data || err.text || String(err) });
+                        }
+                        rwProgress.textContent = `Sent ${idx}/${totalReq} requests...`;
+                    }
+                    if (sendAbort) break;
+                }
+            } finally {
+                const summary = sendAbort ? `Canceled after ${idx} request${idx === 1 ? "" : "s"}. Failures: ${failures}.` : `Done. Sent ${idx}. ${failures ? failures + " failed." : "All OK."}`;
+                rwProgress.textContent = summary;
+                setSendingState(false);
+                sendAbort = false;
+            }
+        };
+
+        rwNick.addEventListener('input', persistRewardsState);
+        rwDefMsg.addEventListener('input', persistRewardsState);
+
+        renderRows();
+
+        /* ===== Players: User Info ===== */
+        (function () {
+            const nick = document.getElementById('user-nick');
+            const account = document.getElementById('user-account');
+            const fetchBtn = document.getElementById('user-fetch');
+            const clearBtn = document.getElementById('user-clear');
+            const status = document.getElementById('user-status');
+            const output = document.getElementById('user-output');
+            if (!fetchBtn) return;
+
+            fetchBtn.addEventListener('click', async () => {
+                const nickVal = (nick.value || "").trim();
+                const accVal = (account.value || "").trim();
+                if (!nickVal && !accVal) {
+                    setStatus(status, "Enter a nickname or account ID.", "error");
+                    return;
+                }
+                const body = nickVal ? { TargetNickname: nickVal } : { TargetAccountId: accVal };
+                setStatus(status, "Fetching player info...");
+                renderResponse(output, "(loading…)", "(loading…)");
+                const { ok, status: httpStatus, data, text } = await postJson('/getplayerinfo', body);
+                if (ok) {
+                    setStatus(status, "Success.", "success");
+                    renderResponse(output, data ?? text ?? "", "(empty response)");
+                } else {
+                    setStatus(status, `HTTP ${httpStatus}`, "error");
+                    renderResponse(output, data ?? text ?? "", "(no response body)");
+                }
+            });
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    nick.value = "";
+                    account.value = "";
+                    setStatus(status, "", "info");
+                    renderResponse(output, "", "(no data)");
+                });
+            }
+        })();
+
+        /* ===== Players: Ban / CheatBan / Mute ===== */
+        (function () {
+            const actionSel = document.getElementById('ban-action');
+            const typeSel = document.getElementById('ban-target-type');
+            const targetInput = document.getElementById('ban-target');
+            const submit = document.getElementById('ban-submit');
+            const status = document.getElementById('ban-status');
+            const output = document.getElementById('ban-output');
+            if (!submit) return;
+
+            submit.addEventListener('click', async () => {
+                const targetValue = (targetInput.value || "").trim();
+                if (!targetValue) {
+                    setStatus(status, "Enter a nickname or account ID.", "error");
+                    return;
+                }
+                const endpoint = `/${actionSel.value}`;
+                const body = typeSel.value === 'nickname'
+                    ? { TargetNickname: targetValue }
+                    : { TargetAccountId: targetValue };
+                setStatus(status, `Calling ${endpoint}...`);
+                renderResponse(output, "(loading…)", "(loading…)");
+                const { ok, status: httpStatus, data, text } = await postJson(endpoint, body);
+                if (ok) {
+                    setStatus(status, "Success.", "success");
+                    renderResponse(output, data ?? text ?? "", "(empty response)");
+                } else {
+                    setStatus(status, `HTTP ${httpStatus}`, "error");
+                    renderResponse(output, data ?? text ?? "", "(no response body)");
+                }
+            });
+        })();
+
+        /* ===== Players: Disconnect ===== */
+        (function () {
+            const nick = document.getElementById('dc-nick');
+            const account = document.getElementById('dc-account');
+            const submit = document.getElementById('dc-submit');
+            const status = document.getElementById('dc-status');
+            const output = document.getElementById('dc-output');
+            if (!submit) return;
+
+            submit.addEventListener('click', async () => {
+                const nickVal = (nick.value || "").trim();
+                const accVal = (account.value || "").trim();
+                if (!nickVal && !accVal) {
+                    setStatus(status, "Enter a nickname or account ID.", "error");
+                    return;
+                }
+                const body = nickVal ? { TargetNickname: nickVal } : { TargetAccountId: accVal };
+                setStatus(status, "Disconnecting...");
+                renderResponse(output, "(loading…)", "(loading…)");
+                const { ok, status: httpStatus, data, text } = await postJson('/disconnect', body);
+                if (ok) {
+                    setStatus(status, "Success.", "success");
+                    renderResponse(output, data ?? text ?? "", "(empty response)");
+                } else {
+                    setStatus(status, `HTTP ${httpStatus}`, "error");
+                    renderResponse(output, data ?? text ?? "", "(no response body)");
+                }
+            });
+        })();
+
+        /* ===== Players: Kick ===== */
+        (function () {
+            const input = document.getElementById('kick-nick');
+            const submit = document.getElementById('kick-submit');
+            const status = document.getElementById('kick-status');
+            const output = document.getElementById('kick-output');
+            if (!submit) return;
+
+            submit.addEventListener('click', async () => {
+                const nickVal = (input.value || "").trim();
+                if (!nickVal) {
+                    setStatus(status, "Enter the nickname to kick.", "error");
+                    return;
+                }
+                setStatus(status, "Sending kick request...");
+                renderResponse(output, "(loading…)", "(loading…)");
+                const { ok, status: httpStatus, data, text } = await postJson('/kick', { TargetNickname: nickVal });
+                if (ok) {
+                    setStatus(status, "Success.", "success");
+                    renderResponse(output, data ?? text ?? "", "(empty response)");
+                } else {
+                    setStatus(status, `HTTP ${httpStatus}`, "error");
+                    renderResponse(output, data ?? text ?? "", "(no response body)");
+                }
+            });
+        })();
+
+        /* ===== Broadcast: Announce / Tip ===== */
+        (function () {
+            const endpointSel = document.getElementById('an-endpoint');
+            const textArea = document.getElementById('an-text');
+            const count = document.getElementById('an-count');
+            const submit = document.getElementById('an-send');
+            const result = document.getElementById('an-result');
+            if (!submit) return;
+
+            textArea.addEventListener('input', () => {
+                count.textContent = textArea.value.length;
+            });
+
+            submit.addEventListener('click', async () => {
+                const msg = (textArea.value || "").trim();
+                if (!msg) {
+                    setStatus(result, "Enter a message to send.", "error");
+                    return;
+                }
+                if (msg.length > 512) {
+                    setStatus(result, "Message exceeds 512 characters.", "error");
+                    return;
+                }
+                const endpoint = endpointSel.value;
+                setStatus(result, `Sending to ${endpoint}...`);
+                const { ok, status: httpStatus, data, text } = await postJson(endpoint, { Text: msg });
+                if (ok) {
+                    setStatus(result, "Announcement sent.", "success");
+                } else {
+                    setStatus(result, `HTTP ${httpStatus}: ${(data && data.message) || ''}`, "error");
+                }
+            });
+        })();
+
+        /* ===== Events ===== */
+        (function () {
+            const capsuleBtn = document.getElementById('capsule-send');
+            if (capsuleBtn) {
+                const start = document.getElementById('capsule-start');
+                const end = document.getElementById('capsule-end');
+                const mp = document.getElementById('capsule-mp');
+                const rt = document.getElementById('capsule-rt');
+                const status = document.getElementById('capsule-status');
+                capsuleBtn.addEventListener('click', async () => {
+                    const startEpoch = start.value ? toEpoch(start.value) : 0;
+                    const endEpoch = end.value ? toEpoch(end.value) : 0;
+                    if ((start.value && Number.isNaN(startEpoch)) || (end.value && Number.isNaN(endEpoch))) {
+                        setStatus(status, "Provide valid start/end times.", "error");
+                        return;
+                    }
+                    const body = {
+                        newCapsuleEventStartDate: startEpoch,
+                        newCapsuleEventEndDate: endEpoch,
+                        newMpPrice: Math.max(0, parseInt(mp.value, 10) || 0),
+                        newRtPrice: Math.max(0, parseInt(rt.value, 10) || 0)
+                    };
+                    setStatus(status, "Updating capsule event...");
+                    const { ok, status: httpStatus, data, text } = await postJson('/updatecapsuleevent', body);
+                    setStatus(status, ok ? "Capsule event updated." : `HTTP ${httpStatus}`, ok ? "success" : "error");
+                });
+            }
+
+            const expmpBtn = document.getElementById('expmp-send');
+            if (expmpBtn) {
+                const start = document.getElementById('expmp-start');
+                const end = document.getElementById('expmp-end');
+                const exp = document.getElementById('expmp-exp');
+                const mp = document.getElementById('expmp-mp');
+                const status = document.getElementById('expmp-status');
+                expmpBtn.addEventListener('click', async () => {
+                    const startEpoch = start.value ? toEpoch(start.value) : 0;
+                    const endEpoch = end.value ? toEpoch(end.value) : 0;
+                    if ((start.value && Number.isNaN(startEpoch)) || (end.value && Number.isNaN(endEpoch))) {
+                        setStatus(status, "Provide valid start/end times.", "error");
+                        return;
+                    }
+                    const body = {
+                        newExpMpBonusStartDate: startEpoch,
+                        newExpMpBonusEndDate: endEpoch,
+                        newExpBonusPercent: Math.max(0, parseInt(exp.value, 10) || 0),
+                        newMpBonusPercent: Math.max(0, parseInt(mp.value, 10) || 0)
+                    };
+                    setStatus(status, "Updating EXP/MP event...");
+                    const { ok, status: httpStatus } = await postJson('/updateexpmpevent', body);
+                    setStatus(status, ok ? "EXP/MP event updated." : `HTTP ${httpStatus}`, ok ? "success" : "error");
+                });
+            }
+
+            const missionBtn = document.getElementById('mission-send');
+            if (missionBtn) {
+                const start = document.getElementById('mission-start');
+                const end = document.getElementById('mission-end');
+                const status = document.getElementById('mission-status');
+                missionBtn.addEventListener('click', async () => {
+                    const startEpoch = start.value ? toEpoch(start.value) : 0;
+                    const endEpoch = end.value ? toEpoch(end.value) : 0;
+                    if ((start.value && Number.isNaN(startEpoch)) || (end.value && Number.isNaN(endEpoch))) {
+                        setStatus(status, "Provide valid start/end times.", "error");
+                        return;
+                    }
+                    const body = {
+                        newEventMissionStartDate: startEpoch,
+                        newEventMissionEndDate: endEpoch
+                    };
+                    setStatus(status, "Updating event mission...");
+                    const { ok, status: httpStatus } = await postJson('/updateeventmission', body);
+                    setStatus(status, ok ? "Event mission updated." : `HTTP ${httpStatus}`, ok ? "success" : "error");
+                });
+            }
+
+            const tradeBtn = document.getElementById('trade-send');
+            if (tradeBtn) {
+                const start = document.getElementById('trade-start');
+                const end = document.getElementById('trade-end');
+                const status = document.getElementById('trade-status');
+                tradeBtn.addEventListener('click', async () => {
+                    const startEpoch = start.value ? toEpoch(start.value) : 0;
+                    const endEpoch = end.value ? toEpoch(end.value) : 0;
+                    if ((start.value && Number.isNaN(startEpoch)) || (end.value && Number.isNaN(endEpoch))) {
+                        setStatus(status, "Provide valid start/end times.", "error");
+                        return;
+                    }
+                    const body = {
+                        newTradeEventStartDate: startEpoch,
+                        newTradeEventEndDate: endEpoch
+                    };
+                    setStatus(status, "Updating trade system...");
+                    const { ok, status: httpStatus } = await postJson('/updatetradesystem', body);
+                    setStatus(status, ok ? "Trade system updated." : `HTTP ${httpStatus}`, ok ? "success" : "error");
+                });
+            }
+        })();
+
+        /* ===== Rooms ===== */
+        (function () {
+            const roomsBtn = document.getElementById('rooms-refresh');
+            if (roomsBtn) {
+                const status = document.getElementById('rooms-status');
+                const bodyEl = document.getElementById('rooms-body');
+                roomsBtn.addEventListener('click', async () => {
+                    setStatus(status, "Loading rooms...");
+                    bodyEl.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">(loading…)</td></tr>`;
+                    const { ok, status: httpStatus, data, text } = await getJson('/getrooms');
+                    if (!ok) {
+                        setStatus(status, `HTTP ${httpStatus}`, "error");
+                        bodyEl.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">${escapeHtml(formatJson(data ?? text ?? "No response"))}</td></tr>`;
+                        return;
+                    }
+                    const rooms = (data && data.rooms) || [];
+                    if (rooms.length === 0) {
+                        const message = (data && data.message) || (typeof text === 'string' ? text : "No rooms available");
+                        bodyEl.innerHTML = `<tr><td colspan="5" class="text-center py-6 sub">${escapeHtml(message || "No rooms available")}</td></tr>`;
+                        setStatus(status, "No rooms.");
+                        return;
+                    }
+                    bodyEl.innerHTML = rooms.map(room => `
+                        <tr class="row">
+                            <td class="px-3 py-2">${escapeHtml(room.RoomNumber ?? "-")}</td>
+                            <td class="px-3 py-2">${escapeHtml(room.RoomTitle ?? "")}</td>
+                            <td class="px-3 py-2">${escapeHtml(room.TotalPlayers ?? "-")}</td>
+                            <td class="px-3 py-2">${escapeHtml(room.TotalMaxPlayers ?? "-")}</td>
+                            <td class="px-3 py-2">${escapeHtml(room.Password ?? "")}</td>
+                        </tr>`).join('');
+                    setStatus(status, `Loaded ${rooms.length} room${rooms.length === 1 ? '' : 's'}.`, "success");
+                });
+            }
+
+            const roomInfoBtn = document.getElementById('roominfo-fetch');
+            if (roomInfoBtn) {
+                const input = document.getElementById('roominfo-number');
+                const status = document.getElementById('roominfo-status');
+                const output = document.getElementById('roominfo-output');
+                roomInfoBtn.addEventListener('click', async () => {
+                    const value = (input.value || "").trim();
+                    if (!value) {
+                        setStatus(status, "Enter a room number.", "error");
+                        return;
+                    }
+                    const roomNumber = parseInt(value, 10);
+                    if (!Number.isInteger(roomNumber)) {
+                        setStatus(status, "Room number must be numeric.", "error");
+                        return;
+                    }
+                    setStatus(status, "Fetching room info...");
+                    renderResponse(output, "(loading…)", "(loading…)");
+                    const { ok, status: httpStatus, data, text } = await postJson('/getroominfo', { RoomNumber: String(roomNumber) });
+                    if (ok) {
+                        setStatus(status, "Success.", "success");
+                        renderResponse(output, data ?? text ?? "", "(empty response)");
+                    } else {
+                        setStatus(status, `HTTP ${httpStatus}`, "error");
+                        renderResponse(output, data ?? text ?? "", "(no response body)");
+                    }
+                });
+            }
+
+            const changeHostBtn = document.getElementById('changehost-submit');
+            if (changeHostBtn) {
+                const input = document.getElementById('changehost-nick');
+                const status = document.getElementById('changehost-status');
+                const output = document.getElementById('changehost-output');
+                changeHostBtn.addEventListener('click', async () => {
+                    const nick = (input.value || "").trim();
+                    if (!nick) {
+                        setStatus(status, "Enter a nickname.", "error");
+                        return;
+                    }
+                    setStatus(status, "Changing host...");
+                    renderResponse(output, "(loading…)", "(loading…)");
+                    const { ok, status: httpStatus, data, text } = await postJson('/changehost', { TargetNickname: nick });
+                    if (ok) {
+                        setStatus(status, "Success.", "success");
+                        renderResponse(output, data ?? text ?? "", "(empty response)");
+                    } else {
+                        setStatus(status, `HTTP ${httpStatus}`, "error");
+                        renderResponse(output, data ?? text ?? "", "(no response body)");
+                    }
+                });
+            }
+
+            const changeTitleBtn = document.getElementById('changeroom-submit');
+            if (changeTitleBtn) {
+                const numberInput = document.getElementById('changeroom-number');
+                const titleInput = document.getElementById('changeroom-title');
+                const status = document.getElementById('changeroom-status');
+                const output = document.getElementById('changeroom-output');
+                changeTitleBtn.addEventListener('click', async () => {
+                    const numberVal = (numberInput.value || "").trim();
+                    const titleVal = (titleInput.value || "").trim();
+                    if (!numberVal || !titleVal) {
+                        setStatus(status, "Enter room number and title.", "error");
+                        return;
+                    }
+                    const roomNumber = parseInt(numberVal, 10);
+                    if (!Number.isInteger(roomNumber)) {
+                        setStatus(status, "Room number must be numeric.", "error");
+                        return;
+                    }
+                    if (titleVal.length > 29) {
+                        setStatus(status, "Title must be 29 characters or fewer.", "error");
+                        return;
+                    }
+                    setStatus(status, "Updating room title...");
+                    renderResponse(output, "(loading…)", "(loading…)");
+                    const { ok, status: httpStatus, data, text } = await postJson('/changeroomtitle', { RoomNumber: String(roomNumber), NewTitle: titleVal });
+                    if (ok) {
+                        setStatus(status, "Success.", "success");
+                        renderResponse(output, data ?? text ?? "", "(empty response)");
+                    } else {
+                        setStatus(status, `HTTP ${httpStatus}`, "error");
+                        renderResponse(output, data ?? text ?? "", "(no response body)");
+                    }
+                });
+            }
+
+            const breakRoomBtn = document.getElementById('breakroom-submit');
+            if (breakRoomBtn) {
+                const input = document.getElementById('breakroom-number');
+                const status = document.getElementById('breakroom-status');
+                const output = document.getElementById('breakroom-output');
+                breakRoomBtn.addEventListener('click', async () => {
+                    const value = (input.value || "").trim();
+                    if (!value) {
+                        setStatus(status, "Enter a room number.", "error");
+                        return;
+                    }
+                    const roomNumber = parseInt(value, 10);
+                    if (!Number.isInteger(roomNumber)) {
+                        setStatus(status, "Room number must be numeric.", "error");
+                        return;
+                    }
+                    setStatus(status, "Breaking room...");
+                    renderResponse(output, "(loading…)", "(loading…)");
+                    const { ok, status: httpStatus, data, text } = await postJson('/breakroom', { RoomNumber: String(roomNumber) });
+                    if (ok) {
+                        setStatus(status, "Success.", "success");
+                        renderResponse(output, data ?? text ?? "", "(empty response)");
+                    } else {
+                        setStatus(status, `HTTP ${httpStatus}`, "error");
+                        renderResponse(output, data ?? text ?? "", "(no response body)");
+                    }
+                });
+            }
+        })();
+
+        /* ===== Monitoring ===== */
+        (function () {
+            const onlineBtn = document.getElementById('online-refresh');
+            if (onlineBtn) {
+                const status = document.getElementById('online-status');
+                const bodyEl = document.getElementById('online-body');
+                onlineBtn.addEventListener('click', async () => {
+                    setStatus(status, "Loading online players...");
+                    bodyEl.innerHTML = `<tr><td colspan="3" class="text-center py-6 sub">(loading…)</td></tr>`;
+                    const { ok, status: httpStatus, data, text } = await getJson('/getOnlinePlayers');
+                    if (!ok) {
+                        setStatus(status, `HTTP ${httpStatus}`, "error");
+                        bodyEl.innerHTML = `<tr><td colspan="3" class="text-center py-6 sub">${escapeHtml(formatJson(data ?? text ?? "No response"))}</td></tr>`;
+                        return;
+                    }
+                    const players = (data && data.online_players) || [];
+                    if (players.length === 0) {
+                        bodyEl.innerHTML = `<tr><td colspan="3" class="text-center py-6 sub">No players online.</td></tr>`;
+                        setStatus(status, "No players online.");
+                        return;
+                    }
+                    bodyEl.innerHTML = players.map(p => `
+                        <tr class="row">
+                            <td class="px-3 py-2">${escapeHtml(p.nickname ?? "")}</td>
+                            <td class="px-3 py-2">${escapeHtml(p.session_id ?? "")}</td>
+                            <td class="px-3 py-2">${escapeHtml(p.account_id ?? "")}</td>
+                        </tr>`).join('');
+                    setStatus(status, `Loaded ${players.length} player${players.length === 1 ? '' : 's'}.`, "success");
+                });
+            }
+        })();
+
+        /* ===== Tournaments: Map Roulette ===== */
+        (function () {
+            const poolArea = document.getElementById('mr-pool');
+            const defaultsBtn = document.getElementById('mr-defaults');
+            const clearBtn = document.getElementById('mr-clear');
+            const countInput = document.getElementById('mr-count');
+            const spinBtn = document.getElementById('mr-spin');
+            const resetBtn = document.getElementById('mr-reset');
+            const resultEl = document.getElementById('mr-result');
+            const historyEl = document.getElementById('mr-history');
+            const statusEl = document.getElementById('mr-status');
+            if (!poolArea || !resultEl) return;
+
+            const MAX_HISTORY = 20;
+            let history = [];
+
+            const clampCount = (value) => {
+                const num = Number.isFinite(value) ? value : 1;
+                return Math.max(1, Math.min(5, Math.floor(num)));
+            };
+
+            const readPool = () => {
+                return poolArea.value
+                    .split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(Boolean);
+            };
+
+            const renderHistory = () => {
+                if (!historyEl) return;
+                if (!history.length) {
+                    historyEl.innerHTML = '<li class="sub list-none">(no spins yet)</li>';
+                    return;
+                }
+                historyEl.innerHTML = history
+                    .map(entry => `<li>${escapeHtml(entry.join(', '))}</li>`)
+                    .join('');
+            };
+
+            const setResult = (picks) => {
+                if (!picks.length) {
+                    resultEl.textContent = '(no spins yet)';
+                    return;
+                }
+                resultEl.textContent = picks.join(', ');
+            };
+
+            const spin = () => {
+                const maps = readPool();
+                if (!maps.length) {
+                    setStatus(statusEl, 'Add at least one map before spinning.', 'error');
+                    return;
+                }
+                const countRaw = parseInt(countInput.value, 10);
+                const drawCount = clampCount(Number.isFinite(countRaw) ? countRaw : 1);
+                countInput.value = drawCount;
+
+                const available = maps.slice();
+                const picks = [];
+                for (let i = 0; i < drawCount && available.length; i++) {
+                    const idx = Math.floor(Math.random() * available.length);
+                    const [choice] = available.splice(idx, 1);
+                    picks.push(choice);
+                }
+                if (!picks.length) {
+                    setStatus(statusEl, 'Unable to spin with the current pool.', 'error');
+                    return;
+                }
+
+                history.unshift(picks);
+                if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+                setResult(picks);
+                renderHistory();
+                setStatus(statusEl, `Selected ${picks.length} map${picks.length === 1 ? '' : 's'}.`, 'success');
+            };
+
+            if (defaultsBtn) {
+                defaultsBtn.addEventListener('click', () => {
+                    poolArea.value = MAP_ROULETTE_DEFAULT_POOL.join('\n');
+                    setStatus(statusEl, 'Loaded default maps.', 'success');
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    poolArea.value = '';
+                    setStatus(statusEl, 'Cleared map pool.', 'info');
+                });
+            }
+
+            if (spinBtn) {
+                spinBtn.addEventListener('click', () => {
+                    setStatus(statusEl, 'Spinning...');
+                    spin();
+                });
+            }
+
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    history = [];
+                    renderHistory();
+                    setResult([]);
+                    setStatus(statusEl, 'History cleared.', 'success');
+                });
+            }
+
+            if (!poolArea.value) {
+                poolArea.value = MAP_ROULETTE_DEFAULT_POOL.join('\n');
+            }
+            renderHistory();
+            setResult([]);
+        })();
+
+
+        /* ===== Process Manager ===== */
+        (function () {
+            const $ = (id) => document.getElementById(id);
+            const base = $("pm-base");
+            const nameSel = $("pm-name");
+            const argsInp = $("pm-args");
+            const body = $("pm-body");
+            const tailId = $("pm-tail-id");
+            const tailLines = $("pm-tail-lines");
+            const logBox = $("pm-log");
+
+            async function jget(path) {
+                const resp = await fetch((base.value || "").replace(/\/$/, "") + path, { method: "GET" });
+                const text = await resp.text();
+                let data = null; try { data = JSON.parse(text); } catch { }
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text}`);
+                return data;
+            }
+            async function jpost(path, payload) {
+                const resp = await fetch((base.value || "").replace(/\/$/, "") + path, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload || {})
+                });
+                const text = await resp.text();
+                let data = null; try { data = JSON.parse(text); } catch { }
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text}`);
+                return data;
+            }
+
+            async function loadAllow() {
+                nameSel.innerHTML = `<option>(loading…)</option>`;
+                try {
+                    const data = await jget("/allowlist");
+                    const names = data.allowed || [];
+                    if (names.length === 0) { nameSel.innerHTML = `<option>(empty)</option>`; return; }
+                    nameSel.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join("");
+                } catch (e) {
+                    nameSel.innerHTML = `<option>(error)</option>`;
+                    console.error(e);
+                    alert("Failed to load allowlist: " + e.message);
+                }
+            }
+            async function refreshList() {
+                body.innerHTML = `<tr><td colspan="6" class="text-center py-6 sub">(loading…)</td></tr>`;
+                try {
+                    const data = await jget("/list");
+                    const procs = data.processes || [];
+                    if (procs.length === 0) {
+                        body.innerHTML = `<tr><td colspan="6" class="text-center py-6 sub">(empty)</td></tr>`;
+                        return;
+                    }
+                    body.innerHTML = procs.map(p => `
+                        <tr class="row">
+                            <td class="px-3 py-2 mono">${p.id}</td>
+                            <td class="px-3 py-2">${p.name}</td>
+                            <td class="px-3 py-2">${p.pid}</td>
+                            <td class="px-3 py-2">${p.status}</td>
+                            <td class="px-3 py-2 break-words">${(p.cmd || []).join(" ")}</td>
+                            <td class="px-3 py-2">
+                                <button class="btn" data-stop="${p.id}">Stop</button>
+                                <button class="btn" data-tail="${p.id}">Tail</button>
+                            </td>
+                        </tr>
+                    `).join("");
+                } catch (e) {
+                    body.innerHTML = `<tr><td colspan="6" class="text-center py-6 sub">Error: ${e.message}</td></tr>`;
+                }
+            }
+            $("pm-refresh-allow").onclick = loadAllow;
+            $("pm-refresh").onclick = refreshList;
+
+            $("pm-start").onclick = async () => {
+                const name = nameSel.value;
+                let args = [];
+                const raw = argsInp.value.trim();
+                if (raw) {
+                    try { args = JSON.parse(raw); if (!Array.isArray(args)) throw new Error("args must be JSON array"); }
+                    catch (e) { alert("Args parse error: " + e.message); return; }
+                }
+                try {
+                    const res = await jpost("/start", { name, args });
+                    await refreshList();
+                    tailId.value = res.id;
+                    alert(`Started '${name}' (id: ${res.id}, pid: ${res.pid})`);
+                } catch (e) {
+                    alert("Start failed: " + e.message);
+                }
+            };
+
+            body.addEventListener("click", async (ev) => {
+                const idStop = ev.target.getAttribute("data-stop");
+                const idTail = ev.target.getAttribute("data-tail");
+                if (idStop) {
+                    try {
+                        await jpost("/stop", { id: idStop });
+                        await refreshList();
+                    } catch (e) { alert("Stop failed: " + e.message); }
+                }
+                if (idTail) {
+                    tailId.value = idTail;
+                    $("pm-tail-btn").click();
+                }
+            });
+
+            $("pm-tail-btn").onclick = async () => {
+                const id = tailId.value.trim();
+                const n = parseInt(tailLines.value || "200", 10) || 200;
+                if (!id) { alert("Enter a process id to tail."); return; }
+                try {
+                    const data = await jget(`/tail?id=${encodeURIComponent(id)}&lines=${n}`);
+                    logBox.textContent = (data.lines || []).join("\n") || "(no output)";
+                } catch (e) {
+                    logBox.textContent = "Tail error: " + e.message;
+                }
+            };
+
+            const _show = window.show;
+            window.show = (panelId, title) => {
+                _show(panelId, title);
+                if (panelId === "panel-proc") {
+                    loadAllow(); refreshList();
+                }
+                if (panelId === "panel-rooms") {
+                    const btn = document.getElementById('rooms-refresh');
+                    if (btn && !btn.disabled) btn.click();
+                }
+                if (panelId === "panel-online") {
+                    const btn = document.getElementById('online-refresh');
+                    if (btn && !btn.disabled) btn.click();
+                }
+            };
+        })();
+    </script>
+</body>
+</html>
